@@ -12,7 +12,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    ReplyKeyboardRemove,
+    ReplyKeyboardRemove, Voice, VideoNote,
 )
 from aiogram.enums import ParseMode
 
@@ -194,6 +194,70 @@ def setup_handlers(dp: Dispatcher, db: Storage):
         )
         await callback.answer()
 
+    # ── Вспомогательная функция: сохранить любое достижение ──────
+    async def _save_any_achievement(message: Message, achievement_text: str):
+        """Единая логика сохранения достижения для текста, голоса и видео."""
+        user_id = message.from_user.id
+        user = db.get_user(user_id)
+        if not user:
+            await message.answer(NOT_REGISTERED)
+            return
+
+        state = user["state"]
+
+        # В состоянии ожидания оценки — просим цифру
+        if state == "waiting_rating":
+            await message.answer(
+                "Сейчас мне нужна цифра от 1 до 10 для оценки 🙂\n"
+                "После этого снова сможешь записывать шаги!"
+            )
+            return
+
+        # В состоянии настройки — не принимаем
+        if state in ("setup_goal", "setup_timezone", "setup_interval"):
+            await message.answer("Давай сначала закончим настройку 😊")
+            return
+
+        # В состоянии смены цели — голос/видео не подходит
+        if state == "change_goal":
+            await message.answer("Для смены цели напиши её текстом 🎯")
+            return
+
+        # Обычное состояние active
+        if state == "active":
+            if not user["is_active"]:
+                await message.answer(
+                    "Напоминания на паузе. Отправь /resume чтобы возобновить.\n\n"
+                    "Но я всё равно сохранила твой шаг! 🌟"
+                )
+            db.save_achievement(user_id, achievement_text)
+            response = random.choice(ACHIEVEMENT_SAVED)
+            await message.answer(response)
+            return
+
+        await message.answer(NOT_REGISTERED)
+
+    # Голосовые сообщения
+    @dp.message(F.voice)
+    async def handle_voice(message: Message):
+        duration = message.voice.duration
+        mins = duration // 60
+        secs = duration % 60
+        if mins > 0:
+            dur_str = f"{mins} мин {secs} сек"
+        else:
+            dur_str = f"{secs} сек"
+        achievement_text = f"🎤 Голосовое сообщение ({dur_str})"
+        await _save_any_achievement(message, achievement_text)
+
+    # Видеокружочки
+    @dp.message(F.video_note)
+    async def handle_video_note(message: Message):
+        duration = message.video_note.duration
+        dur_str = f"{duration} сек"
+        achievement_text = f"🎥 Видеосообщение ({dur_str})"
+        await _save_any_achievement(message, achievement_text)
+
     # Все текстовые сообщения
     @dp.message(F.text)
     async def handle_text(message: Message):
@@ -269,19 +333,7 @@ def setup_handlers(dp: Dispatcher, db: Storage):
             return
 
         # ── Обычное состояние active: сохраняем достижение ────
-        if state == "active":
-            if not user["is_active"]:
-                await message.answer(
-                    "Напоминания на паузе. Отправь /resume чтобы возобновить.\n\n"
-                    "Но я всё равно сохранила твой шаг! 🌟"
-                )
-            db.save_achievement(user_id, text)
-            response = random.choice(ACHIEVEMENT_SAVED)
-            await message.answer(response)
-            return
-
-        # Если состояние неизвестное — просим /start
-        await message.answer(NOT_REGISTERED)
+        await _save_any_achievement(message, text)
 
 
 def create_bot_and_dispatcher(db: Storage):
