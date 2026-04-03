@@ -12,7 +12,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    ReplyKeyboardRemove, Voice, VideoNote,
+    ReplyKeyboardRemove, Voice, VideoNote, FSInputFile,
 )
 from aiogram.enums import ParseMode
 
@@ -117,6 +117,9 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
             first_name=message.from_user.first_name or "",
         )
         db.update_user(user_id, state="setup_goal")
+
+        photo = FSInputFile("media/intro.png")
+        await message.answer_photo(photo=photo)
         await message.answer(WELCOME)
 
     # /help
