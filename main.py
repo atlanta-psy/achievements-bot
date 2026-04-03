@@ -17,7 +17,17 @@ log = logging.getLogger(__name__)
 
 async def main():
     db = Storage()
-    bot, dp = create_bot_and_dispatcher(db)
+
+    # Получаем username бота (нужен для определения упоминаний в группах)
+    from aiogram import Bot as _Bot
+    from config import TG_BOT_TOKEN
+    _tmp_bot = _Bot(token=TG_BOT_TOKEN)
+    bot_info = await _tmp_bot.get_me()
+    bot_username = bot_info.username
+    await _tmp_bot.session.close()
+    log.info("Бот запущен как @%s", bot_username)
+
+    bot, dp = create_bot_and_dispatcher(db, bot_username=bot_username)
 
     # Запускаем веб-панель администратора
     admin_runner = await start_admin(db)

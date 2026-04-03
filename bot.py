@@ -22,6 +22,7 @@ from messages import (
     REMINDERS, ACHIEVEMENT_SAVED, PAUSED, RESUMED, NOT_PAUSED, ALREADY_PAUSED,
     HELP, GOAL_CHANGE_PROMPT, GOAL_CHANGED, NO_ACHIEVEMENTS, NOT_REGISTERED,
     ASK_RATING_AGAIN, build_summary, rating_response_low, rating_response_high,
+    GROUP_NOT_REGISTERED, GROUP_EMPTY_MENTION, GROUP_ACHIEVEMENT_SAVED,
 )
 from storage import Storage
 
@@ -75,7 +76,30 @@ def interval_keyboard() -> InlineKeyboardMarkup:
 
 # ── Регистрация хендлеров ────────────────────────────────────────
 
-def setup_handlers(dp: Dispatcher, db: Storage):
+def _extract_group_text(message: Message, bot_username: str) -> str | None:
+    """Возвращает текст без упоминания бота, или None если бот не упомянут."""
+    if not message.entities or not message.text:
+        return None
+
+    text = message.text
+    removals = []
+    for entity in message.entities:
+        if entity.type == "mention":
+            mention = text[entity.offset: entity.offset + entity.length]
+            if mention.lstrip("@").lower() == bot_username.lower():
+                removals.append((entity.offset, entity.offset + entity.length))
+
+    if not removals:
+        return None
+
+    # Вырезаем упоминания справа налево, чтобы не сдвигать смещения
+    for start, end in sorted(removals, reverse=True):
+        text = text[:start] + text[end:]
+
+    return text.strip()
+
+
+def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
 
     # /start
     @dp.message(CommandStart())
@@ -193,6 +217,33 @@ def setup_handlers(dp: Dispatcher, db: Storage):
             SETUP_COMPLETE.format(interval=interval)
         )
         await callback.answer()
+
+    # ── Групповой чат: тег бота ───────────────────────────────────
+    @dp.message(F.chat.type.in_({"group", "supergroup"}), F.text)
+    async def handle_group_text(message: Message):
+        achievement_text = _extract_group_text(message, bot_username)
+        if achievement_text is None:
+            return  # Бот не упомянут — игнорируем
+
+        user_id = message.from_user.id
+        name = message.from_user.first_name or "друг"
+        user = db.get_user(user_id)
+
+        # Не зарегистрирован или ещё в процессе настройки
+        if not user or user["state"] in ("setup_goal", "setup_timezone", "setup_interval"):
+            await message.reply(
+                GROUP_NOT_REGISTERED.format(name=name, bot_username=bot_username)
+            )
+            return
+
+        # Упомянул бота но ничего не написал
+        if not achievement_text:
+            await message.reply(GROUP_EMPTY_MENTION.format(name=name))
+            return
+
+        db.save_achievement(user_id, achievement_text)
+        response = random.choice(GROUP_ACHIEVEMENT_SAVED).format(name=name)
+        await message.reply(response)
 
     # ── Вспомогательная функция: сохранить любое достижение ──────
     async def _save_any_achievement(message: Message, achievement_text: str):
@@ -336,8 +387,8 @@ def setup_handlers(dp: Dispatcher, db: Storage):
         await _save_any_achievement(message, text)
 
 
-def create_bot_and_dispatcher(db: Storage):
+def create_bot_and_dispatcher(db: Storage, bot_username: str = ""):
     bot = Bot(token=TG_BOT_TOKEN)
     dp = Dispatcher()
-    setup_handlers(dp, db)
+    setup_handlers(dp, db, bot_username)
     return bot, dp
