@@ -18,7 +18,7 @@ from aiogram.enums import ParseMode
 
 from config import TG_BOT_TOKEN, CONSULTANT_LINK, LOW_RATING_THRESHOLD, SUMMARY_DAYS
 from messages import (
-    WELCOME, GOAL_SAVED, TIMEZONE_SAVED, SETUP_COMPLETE, ALREADY_SETUP,
+    WELCOME_CAPTION, WELCOME_PROMPT, GOAL_SAVED, TIMEZONE_SAVED, SETUP_COMPLETE, ALREADY_SETUP,
     REMINDERS, ACHIEVEMENT_SAVED, PAUSED, RESUMED, NOT_PAUSED, ALREADY_PAUSED,
     HELP, GOAL_CHANGE_PROMPT, GOAL_CHANGED, NO_ACHIEVEMENTS, NOT_REGISTERED,
     ASK_RATING_AGAIN, build_summary, rating_response_low, rating_response_high,
@@ -119,8 +119,8 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
         db.update_user(user_id, state="setup_goal")
 
         photo = FSInputFile("media/intro.png")
-        await message.answer_photo(photo=photo)
-        await message.answer(WELCOME)
+        await message.answer_photo(photo=photo, caption=WELCOME_CAPTION)
+        await message.answer(WELCOME_PROMPT)
 
     # /help
     @dp.message(Command("help"))
