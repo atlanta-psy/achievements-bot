@@ -291,8 +291,8 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
 
         await message.answer(NOT_REGISTERED)
 
-    # Голосовые сообщения
-    @dp.message(F.voice)
+    # Голосовые сообщения (только в личке)
+    @dp.message(F.voice, F.chat.type == "private")
     async def handle_voice(message: Message):
         duration = message.voice.duration
         mins = duration // 60
@@ -304,8 +304,8 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
         achievement_text = f"🎤 Голосовое сообщение ({dur_str})"
         await _save_any_achievement(message, achievement_text)
 
-    # Видеокружочки
-    @dp.message(F.video_note)
+    # Видеокружочки (только в личке)
+    @dp.message(F.video_note, F.chat.type == "private")
     async def handle_video_note(message: Message):
         duration = message.video_note.duration
         dur_str = f"{duration} сек"
