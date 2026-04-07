@@ -88,10 +88,18 @@ ACHIEVEMENT_SAVED = [
 
 # ── Сводка ───────────────────────────────────────────────────────
 
+def _escape_md(text: str) -> str:
+    """Экранирует спецсимволы для MarkdownV2."""
+    special = r'\_*[]()~`>#+-=|{}.!'
+    for ch in special:
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
 def build_summary(goal: str, achievements: list, days: int) -> str:
     lines = [
         f"📊 *Твои моменты за {days} дн\\.*\n",
-        f"Твой запрос: _{goal}_\n",
+        f"Твой запрос: _{_escape_md(goal)}_\n",
         "Посмотри, сколько всего было:\n",
     ]
     for i, ach in enumerate(achievements, 1):
