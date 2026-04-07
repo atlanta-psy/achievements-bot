@@ -21,7 +21,8 @@ from messages import (
     WELCOME_CAPTION, WELCOME_PROMPT, GOAL_SAVED, TIMEZONE_SAVED, SETUP_COMPLETE, ALREADY_SETUP,
     REMINDERS, ACHIEVEMENT_SAVED, PAUSED, RESUMED, NOT_PAUSED, ALREADY_PAUSED,
     HELP, GOAL_CHANGE_PROMPT, GOAL_CHANGED, NO_ACHIEVEMENTS, NOT_REGISTERED,
-    ASK_RATING_AGAIN, build_summary, rating_response_low, rating_response_high,
+    ASK_RATING_AGAIN, build_summary, rating_response_high,
+    LOW_RATING_QUESTION, OBSTACLE_RESPONSE,
     GROUP_NOT_REGISTERED, GROUP_EMPTY_MENTION, GROUP_ACHIEVEMENT_SAVED,
 )
 from storage import Storage
@@ -375,15 +376,22 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
                 period_end=user["last_summary_at"],
                 achievements_count=count,
             )
-            db.update_user(user_id, state="active")
 
             if rating <= LOW_RATING_THRESHOLD:
-                link = CONSULTANT_LINK.replace(".", "\\.").replace("-", "\\-")
-                response = rating_response_low(count, CONSULTANT_LINK)
+                db.update_user(user_id, state="waiting_obstacle")
+                await message.answer(LOW_RATING_QUESTION)
             else:
-                response = rating_response_high(rating)
+                db.update_user(user_id, state="active")
+                await message.answer(rating_response_high(rating), parse_mode=ParseMode.MARKDOWN_V2)
+            return
 
-            await message.answer(response, parse_mode=ParseMode.MARKDOWN_V2)
+        # ── Ожидание ответа про препятствие (мягкая продажа) ──
+        if state == "waiting_obstacle":
+            db.update_user(user_id, state="active")
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Записаться на консультацию", url=CONSULTANT_LINK)
+            ]])
+            await message.answer(OBSTACLE_RESPONSE, reply_markup=kb)
             return
 
         # ── Обычное состояние active: сохраняем достижение ────
