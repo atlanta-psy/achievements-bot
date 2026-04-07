@@ -76,7 +76,7 @@ async def check_reminders(bot: Bot, db: Storage):
 async def check_summaries(bot: Bot, db: Storage):
     """Отправляет сводку достижений раз в SUMMARY_DAYS дней."""
     now = time.time()
-    summary_period = SUMMARY_DAYS * 86400
+    summary_period = 60  # ТЕСТ: 1 минута (вернуть: SUMMARY_DAYS * 86400)
 
     users = db.get_all_active_users()
     for user in users:
@@ -89,10 +89,9 @@ async def check_summaries(bot: Bot, db: Storage):
         if now - last_summary < summary_period:
             continue
 
-        # Отправляем сводку только в утренние часы по времени пользователя
-        hour = _user_hour(user["utc_offset"])
-        if not (SUMMARY_HOUR_FROM <= hour < SUMMARY_HOUR_TO):
-            continue
+        # ТЕСТ: окно отключено (вернуть: раскомментировать 2 строки ниже)
+        # hour = _user_hour(user["utc_offset"])
+        # if not (SUMMARY_HOUR_FROM <= hour < SUMMARY_HOUR_TO): continue
 
         # Период для достижений
         period_start = last_summary if last_summary > 0 else user["created_at"]
