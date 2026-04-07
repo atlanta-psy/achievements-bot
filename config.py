@@ -12,9 +12,12 @@ CONSULTANT_LINK = os.getenv("CONSULTANT_LINK", "https://t.me/elena_vasilenko")
 # Как часто отправлять итоговую сводку достижений
 SUMMARY_DAYS = int(os.getenv("SUMMARY_DAYS", "3"))
 
-# ── Порог низкой оценки для CTA ─────────────────────────────────
-# Если пользователь ставит оценку <= этого числа → показать CTA консультации
-LOW_RATING_THRESHOLD = int(os.getenv("LOW_RATING_THRESHOLD", "5"))
+# ── Пороги оценок ────────────────────────────────────────────────
+# 1-4: низкая (вопрос про препятствие → консультация)
+# 5-7: средняя (слепые пятна → консультация)
+# 8-10: высокая (поздравление)
+LOW_RATING_THRESHOLD = int(os.getenv("LOW_RATING_THRESHOLD", "4"))
+MEDIUM_RATING_THRESHOLD = int(os.getenv("MEDIUM_RATING_THRESHOLD", "7"))
 
 # ── Часы отправки сводки ────────────────────────────────────────
 # Сводка отправляется если сейчас между этими часами (по времени пользователя)

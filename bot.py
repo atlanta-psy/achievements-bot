@@ -16,13 +16,15 @@ from aiogram.types import (
 )
 from aiogram.enums import ParseMode
 
-from config import TG_BOT_TOKEN, CONSULTANT_LINK, LOW_RATING_THRESHOLD, SUMMARY_DAYS
+from config import TG_BOT_TOKEN, CONSULTANT_LINK, LOW_RATING_THRESHOLD, MEDIUM_RATING_THRESHOLD, SUMMARY_DAYS
 from messages import (
     WELCOME_CAPTION, WELCOME_PROMPT, GOAL_SAVED, TIMEZONE_SAVED, SETUP_COMPLETE, ALREADY_SETUP,
     REMINDERS, ACHIEVEMENT_SAVED, PAUSED, RESUMED, NOT_PAUSED, ALREADY_PAUSED,
     HELP, GOAL_CHANGE_PROMPT, GOAL_CHANGED, NO_ACHIEVEMENTS, NOT_REGISTERED,
     ASK_RATING_AGAIN, build_summary, rating_response_high,
-    LOW_RATING_QUESTION, OBSTACLE_RESPONSE,
+    LOW_RATING_QUESTION, MEDIUM_RATING_MESSAGE, MEDIUM_AGREE_RESPONSE, MEDIUM_DISAGREE_RESPONSE,
+    CLIENT_CHECK_MESSAGE, CLIENT_YES_RESPONSE,
+    LOW_CONSULTATION_CTAS, MEDIUM_CONSULTATION_CTAS,
     GROUP_NOT_REGISTERED, GROUP_EMPTY_MENTION, GROUP_ACHIEVEMENT_SAVED,
 )
 from storage import Storage
@@ -187,6 +189,59 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
             return
         db.update_user(message.from_user.id, state="change_goal")
         await message.answer(GOAL_CHANGE_PROMPT)
+
+    # Callback: реакция на среднюю оценку
+    @dp.callback_query(F.data.in_({"medium_agree", "medium_disagree"}))
+    async def cb_medium_reaction(callback: CallbackQuery):
+        user_id = callback.from_user.id
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer()
+
+        if callback.data == "medium_agree":
+            db.update_user(user_id, state="waiting_client_check_medium")
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Да", callback_data="client_yes_medium"),
+                InlineKeyboardButton(text="Нет", callback_data="client_no_medium"),
+            ]])
+            await callback.message.answer(MEDIUM_AGREE_RESPONSE)
+            await callback.message.answer(CLIENT_CHECK_MESSAGE, reply_markup=kb)
+        else:
+            db.update_user(user_id, state="active")
+            await callback.message.answer(MEDIUM_DISAGREE_RESPONSE)
+
+    # Callback: проверка клиента (низкая оценка)
+    @dp.callback_query(F.data.in_({"client_yes_low", "client_no_low"}))
+    async def cb_client_low(callback: CallbackQuery):
+        user_id = callback.from_user.id
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer()
+        db.update_user(user_id, state="active")
+
+        if callback.data == "client_yes_low":
+            await callback.message.answer(CLIENT_YES_RESPONSE)
+        else:
+            cta = random.choice(LOW_CONSULTATION_CTAS)
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Записаться на консультацию", url=CONSULTANT_LINK)
+            ]])
+            await callback.message.answer(cta, reply_markup=kb)
+
+    # Callback: проверка клиента (средняя оценка)
+    @dp.callback_query(F.data.in_({"client_yes_medium", "client_no_medium"}))
+    async def cb_client_medium(callback: CallbackQuery):
+        user_id = callback.from_user.id
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer()
+        db.update_user(user_id, state="active")
+
+        if callback.data == "client_yes_medium":
+            await callback.message.answer(CLIENT_YES_RESPONSE)
+        else:
+            cta = random.choice(MEDIUM_CONSULTATION_CTAS)
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Записаться на консультацию", url=CONSULTANT_LINK)
+            ]])
+            await callback.message.answer(cta, reply_markup=kb)
 
     # Callback: выбор часового пояса
     @dp.callback_query(F.data.startswith("tz:"))
@@ -364,7 +419,6 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
                 await message.answer(ASK_RATING_AGAIN)
                 return
 
-            # Находим достижения за период сводки
             period_start = user["last_summary_at"] - SUMMARY_DAYS * 86400
             achievements = db.get_achievements(user_id, since=period_start)
             count = len(achievements)
@@ -380,18 +434,31 @@ def setup_handlers(dp: Dispatcher, db: Storage, bot_username: str = ""):
             if rating <= LOW_RATING_THRESHOLD:
                 db.update_user(user_id, state="waiting_obstacle")
                 await message.answer(LOW_RATING_QUESTION)
+            elif rating <= MEDIUM_RATING_THRESHOLD:
+                db.update_user(user_id, state="waiting_medium_reaction")
+                kb = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="Так и есть", callback_data="medium_agree"),
+                    InlineKeyboardButton(text="Не согласна", callback_data="medium_disagree"),
+                ]])
+                await message.answer(MEDIUM_RATING_MESSAGE, reply_markup=kb)
             else:
                 db.update_user(user_id, state="active")
                 await message.answer(rating_response_high(rating), parse_mode=ParseMode.MARKDOWN_V2)
             return
 
-        # ── Ожидание ответа про препятствие (мягкая продажа) ──
+        # ── Ожидание ответа про препятствие (низкая оценка) ──
         if state == "waiting_obstacle":
-            db.update_user(user_id, state="active")
+            db.update_user(user_id, state="waiting_client_check_low")
             kb = InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="Записаться на консультацию", url=CONSULTANT_LINK)
+                InlineKeyboardButton(text="Да", callback_data="client_yes_low"),
+                InlineKeyboardButton(text="Нет", callback_data="client_no_low"),
             ]])
-            await message.answer(OBSTACLE_RESPONSE, reply_markup=kb)
+            await message.answer(CLIENT_CHECK_MESSAGE, reply_markup=kb)
+            return
+
+        # ── Ожидание кнопки (не нажали — написали текст) ──────
+        if state in ("waiting_medium_reaction", "waiting_client_check_low", "waiting_client_check_medium"):
+            await message.answer("Пожалуйста, выбери один из вариантов выше 👆")
             return
 
         # ── Обычное состояние active: сохраняем достижение ────
