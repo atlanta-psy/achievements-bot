@@ -23,7 +23,7 @@ from storage import Storage
 log = logging.getLogger(__name__)
 
 CHECK_REMINDERS_INTERVAL = 30 * 60   # проверяем напоминания каждые 30 минут
-CHECK_SUMMARIES_INTERVAL = 60 * 60   # проверяем сводки каждый час
+CHECK_SUMMARIES_INTERVAL = 60   # ТЕСТ: каждую минуту (вернуть: 60 * 60)
 
 
 def _user_hour(utc_offset: int) -> int:
